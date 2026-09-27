@@ -48,6 +48,8 @@ func kindSymmetryCases() []kindSymmetryCase {
 
 const sentinelNetworkID = "sentinel-net"
 
+var sentinelGrace = int64(30000000000)
+
 // TestKindClient_NetworkMapping_Expand drives UpdateSpec's sentinel network
 // values through each Kind's real Update adapter and inspects the actual
 // JSON body the adapter puts on the wire, with a local httptest.Server
@@ -101,6 +103,7 @@ func TestKindClient_NetworkMapping_Expand(t *testing.T) {
 					Replicas:          3,
 				},
 				ReplicaSets: true,
+				Swarm:       &client.Swarm{StopGracePeriodSwarm: &sentinelGrace},
 			})
 			if err != nil {
 				t.Fatalf("Update: %v", err)
@@ -123,6 +126,16 @@ func TestKindClient_NetworkMapping_Expand(t *testing.T) {
 				t.Errorf("%s: request body replicaSets = %v (present %v), want true", tc.name, rs, ok)
 			} else if !k.ReplicaSets && ok {
 				t.Errorf("%s: request body carries replicaSets %v, but this Kind has no replica_sets attribute", tc.name, rs)
+			}
+
+			// The swarm block (#69): the adapter passes the pointer through,
+			// so a set column arrives and an unset one arrives as null.
+			if gotBody["stopGracePeriodSwarm"] != float64(sentinelGrace) {
+				t.Errorf("%s: request body stopGracePeriodSwarm = %v, want %d (a missing Swarm mapping in this engine's Update adapter)",
+					tc.name, gotBody["stopGracePeriodSwarm"], sentinelGrace)
+			}
+			if v, ok := gotBody["modeSwarm"]; !ok || v != nil {
+				t.Errorf("%s: request body modeSwarm = %v (present %v), want an explicit null", tc.name, v, ok)
 			}
 
 			gotNet, ok := gotBody["networkIds"].([]any)
@@ -153,7 +166,7 @@ func TestKindClient_NetworkMapping_Flatten(t *testing.T) {
 			fixture := fmt.Sprintf(
 				`{%q:"id-1","networkIds":[%q],"detachDokployNetwork":true,`+
 					`"command":"sentinel-cmd","args":["--sentinel-arg"],"cpuLimit":"0.5","cpuReservation":"0.25",`+
-					`"memoryLimit":"512m","memoryReservation":"256m","replicas":3,"replicaSets":true}`,
+					`"memoryLimit":"512m","memoryReservation":"256m","replicas":3,"replicaSets":true,"stopGracePeriodSwarm":30000000000}`,
 				tc.idJSONKey, sentinelNetworkID,
 			)
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -196,6 +209,10 @@ func TestKindClient_NetworkMapping_Flatten(t *testing.T) {
 			}
 			if obj.Replicas != 3 || len(obj.Args) != 1 || obj.Args[0] != "--sentinel-arg" {
 				t.Errorf("%s: Object.Replicas = %d, Args = %v, want 3 and [--sentinel-arg]", tc.name, obj.Replicas, obj.Args)
+			}
+			if obj.StopGracePeriodSwarm == nil || *obj.StopGracePeriodSwarm != sentinelGrace {
+				t.Errorf("%s: Object.StopGracePeriodSwarm = %v, want %d (a missing Swarm mapping in this engine's <engine>Object function)",
+					tc.name, obj.StopGracePeriodSwarm, sentinelGrace)
 			}
 			if obj.ReplicaSets != k.ReplicaSets {
 				t.Errorf("%s: Object.ReplicaSets = %v, want %v (only the mongo Kind maps replicaSets)", tc.name, obj.ReplicaSets, k.ReplicaSets)

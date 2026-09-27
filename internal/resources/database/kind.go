@@ -30,6 +30,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/vanillauys/terraform-provider-dokploy/internal/client"
+	"github.com/vanillauys/terraform-provider-dokploy/internal/swarm"
 	"github.com/vanillauys/terraform-provider-dokploy/internal/tfutil"
 )
 
@@ -212,6 +213,9 @@ type Object struct {
 	// meaningful only for a Kind with ReplicaSets set.
 	client.ServiceResources
 	ReplicaSets bool
+	// The swarm settings (#69), the same embedded block every engine's read
+	// struct carries.
+	client.Swarm
 }
 
 // CreateSpec is the engine-neutral input to KindClient.Create.
@@ -254,6 +258,9 @@ type UpdateSpec struct {
 	// concrete value; a nil Args clears.
 	client.ServiceResourcesUpdate
 	ReplicaSets bool
+	// Swarm is the swarm part of the body (#69): nil leaves every swarm key
+	// out, which keeps the stored columns (swarm.Expand).
+	Swarm *client.Swarm
 }
 
 // KindClient adapts one engine's client methods to the CreateSpec/Object/
@@ -354,6 +361,7 @@ func schemaAttributes(k Kind) map[string]schema.Attribute {
 			Description: "Detach the shared `dokploy-network` from this service. Defaults to `false`. " +
 				"It has an effect only together with `network_ids`, and it applies on the next deploy.",
 		},
+		"swarm": swarm.Attribute(false),
 		// The operational settings (#51). Every one applies on the next
 		// deploy, so each is a deploy trigger (deployNeeded in model.go).
 		// The command is a plain Optional string: a "" cannot round-trip

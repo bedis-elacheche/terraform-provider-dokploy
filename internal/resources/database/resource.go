@@ -13,6 +13,7 @@ import (
 
 	"github.com/vanillauys/terraform-provider-dokploy/internal/client"
 	"github.com/vanillauys/terraform-provider-dokploy/internal/deploy"
+	"github.com/vanillauys/terraform-provider-dokploy/internal/swarm"
 	"github.com/vanillauys/terraform-provider-dokploy/internal/tfutil"
 )
 
@@ -267,6 +268,7 @@ func (r *genericResource) Create(ctx context.Context, req resource.CreateRequest
 			DetachDokployNetwork: plan.DetachDokployNetwork.ValueBool(),
 		}
 		plan.applyOperational(ctx, &spec, &d)
+		spec.Swarm = swarm.Expand[client.Swarm](ctx, plan.Swarm, types.ObjectNull(swarm.AttrTypes(false)), &d)
 		resp.Diagnostics.Append(d...)
 		if d.HasError() {
 			return
@@ -383,6 +385,7 @@ func (r *genericResource) Update(ctx context.Context, req resource.UpdateRequest
 		DetachDokployNetwork: plan.DetachDokployNetwork.ValueBool(),
 	}
 	plan.applyOperational(ctx, &spec, &updateDiags)
+	spec.Swarm = swarm.Expand[client.Swarm](ctx, plan.Swarm, state.Swarm, &updateDiags)
 	resp.Diagnostics.Append(updateDiags...)
 	if updateDiags.HasError() {
 		return

@@ -12,7 +12,16 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/vanillauys/terraform-provider-dokploy/internal/client"
+	"github.com/vanillauys/terraform-provider-dokploy/internal/swarm"
 )
+
+// swarmBlock is a set swarm block with one column.
+func swarmBlock() types.Object {
+	var diags diag.Diagnostics
+	return swarm.Value(context.Background(), client.Swarm{SwarmBase: client.SwarmBase{
+		LabelsSwarm: map[string]string{"a": "b"},
+	}}, swarm.AttrTypes(false), &diags)
+}
 
 func TestDeployNeeded(t *testing.T) {
 	base := func() genericModel {
@@ -68,6 +77,7 @@ func TestDeployNeeded(t *testing.T) {
 		"memory_reservation": func(m *genericModel) { m.MemoryReservation = types.StringValue("256m") },
 		"replicas":           func(m *genericModel) { m.Replicas = types.Int64Value(2) },
 		"replica_sets":       func(m *genericModel) { m.ReplicaSets = types.BoolValue(true) },
+		"swarm":              func(m *genericModel) { m.Swarm = swarmBlock() },
 	} {
 		plan = base()
 		mutate(&plan)
@@ -821,6 +831,7 @@ func TestOperationalSettingsSet(t *testing.T) {
 		"memory_limit":       func(m *genericModel) { m.MemoryLimit = types.StringValue("512m") },
 		"memory_reservation": func(m *genericModel) { m.MemoryReservation = types.StringValue("256m") },
 		"replicas":           func(m *genericModel) { m.Replicas = types.Int64Value(2) },
+		"swarm":              func(m *genericModel) { m.Swarm = swarmBlock() },
 	} {
 		m := base()
 		mutate(&m)

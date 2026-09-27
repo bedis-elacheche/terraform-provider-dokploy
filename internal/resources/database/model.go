@@ -6,6 +6,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/vanillauys/terraform-provider-dokploy/internal/swarm"
 	"github.com/vanillauys/terraform-provider-dokploy/internal/tfutil"
 )
 
@@ -73,6 +74,9 @@ type genericModel struct {
 
 	// The operational settings (#51), shared with the data-source model.
 	Operational
+
+	// Swarm is the swarm block (#69, internal/swarm).
+	Swarm types.Object
 
 	// attrTypes is captured from the source Plan/State's actual object type
 	// (types.Object.AttributeTypes) so setModel can rebuild a types.Object
@@ -176,7 +180,8 @@ func (o Operational) PutValues(values map[string]attr.Value, attrTypes map[strin
 // The operational settings (#51) are deploy triggers too: the .update
 // endpoints store them on the record, and only the next deploy writes them
 // into the swarm service spec (the same reason a changed password needs a
-// deploy). replica_sets rides on the same rule for the mongo Kind.
+// deploy). replica_sets rides on the same rule for the mongo Kind, and so
+// does the swarm block (#69).
 func deployNeeded(k Kind, plan, state genericModel) bool {
 	if !plan.DockerImage.Equal(state.DockerImage) ||
 		!plan.DatabasePassword.Equal(state.DatabasePassword) ||
@@ -192,7 +197,8 @@ func deployNeeded(k Kind, plan, state genericModel) bool {
 		!plan.MemoryLimit.Equal(state.MemoryLimit) ||
 		!plan.MemoryReservation.Equal(state.MemoryReservation) ||
 		!plan.Replicas.Equal(state.Replicas) ||
-		!plan.ReplicaSets.Equal(state.ReplicaSets) {
+		!plan.ReplicaSets.Equal(state.ReplicaSets) ||
+		!plan.Swarm.Equal(state.Swarm) {
 		return true
 	}
 	for _, ca := range k.CredentialAttrs {
@@ -211,9 +217,10 @@ func deployNeeded(k Kind, plan, state genericModel) bool {
 // setting (#51) that the create endpoints do not accept, so Create knows
 // to issue the follow-up Update that lands them. Replicas counts only when
 // it differs from the server default of 1; replica_sets is not consulted
-// because mongo.create accepts it directly.
+// because mongo.create accepts it directly. The swarm block counts too.
 func (m genericModel) operationalSettingsSet() bool {
-	return !m.Command.IsNull() || !m.Args.IsNull() ||
+	return !m.Swarm.IsNull() ||
+		!m.Command.IsNull() || !m.Args.IsNull() ||
 		!m.CPULimit.IsNull() || !m.CPUReservation.IsNull() ||
 		!m.MemoryLimit.IsNull() || !m.MemoryReservation.IsNull() ||
 		m.Replicas.ValueInt64() != 1
@@ -412,6 +419,9 @@ func resolveUnknownComputedCredentials(ctx context.Context, k Kind, id string, m
 // flatten maps the full API object into the model (Read/refresh). The
 // deploy_* attributes are provider-side only and left untouched.
 func flatten(ctx context.Context, k Kind, obj *Object, m *genericModel, diags *diag.Diagnostics) {
+	// The read after an import starts from a state that holds only the id.
+	importing := m.Name.IsNull()
+	m.Swarm = swarm.Read(ctx, obj.Swarm, m.Swarm, importing, swarm.AttrTypes(false), diags)
 	setComputed(k, obj, m)
 	m.Name = types.StringValue(obj.Name)
 	m.EnvironmentID = types.StringValue(obj.EnvironmentID)
@@ -487,6 +497,7 @@ func getModel(ctx context.Context, k Kind, src getter) (genericModel, diag.Diagn
 		NetworkIDs:           a["network_ids"].(types.Set),
 		DetachDokployNetwork: a["detach_dokploy_network"].(types.Bool),
 		Operational:          OperationalFromAttributes(k, a),
+		Swarm:                a["swarm"].(types.Object),
 	}
 	for _, ca := range k.CredentialAttrs {
 		m.Credentials[ca.TFName] = a[ca.TFName].(types.String)
@@ -519,6 +530,7 @@ func setModel(ctx context.Context, dst setter, m genericModel) diag.Diagnostics 
 
 		"network_ids":            m.NetworkIDs,
 		"detach_dokploy_network": m.DetachDokployNetwork,
+		"swarm":                  m.Swarm,
 
 		// A write-only value never reaches the plan or the state. The
 		// framework nulls it there too; this only says so explicitly.
