@@ -27,6 +27,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/vanillauys/terraform-provider-dokploy/internal/client"
+	"github.com/vanillauys/terraform-provider-dokploy/internal/swarm"
 	"github.com/vanillauys/terraform-provider-dokploy/internal/tfutil"
 )
 
@@ -68,6 +69,7 @@ type model struct {
 	ServerID          types.String `tfsdk:"server_id"`
 	Status            types.String `tfsdk:"status"`
 	CreatedAt         types.String `tfsdk:"created_at"`
+	Swarm             types.Object `tfsdk:"swarm"`
 }
 
 func (d *libsqlDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -139,6 +141,7 @@ func (d *libsqlDataSource) Schema(_ context.Context, _ datasource.SchemaRequest,
 			"server_id":           schema.StringAttribute{Computed: true, Description: "Id of the remote server that runs the service, if not the Dokploy host."},
 			"status":              schema.StringAttribute{Computed: true, Description: "Service status from Dokploy."},
 			"created_at":          schema.StringAttribute{Computed: true, Description: "Creation timestamp from the server."},
+			"swarm":               swarm.DataSourceAttribute(true),
 		},
 	}
 }
@@ -252,6 +255,7 @@ func (d *libsqlDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	config.ServerID = tfutil.StringOrNull(found.ServerID)
 	config.Status = types.StringValue(found.ApplicationStatus)
 	config.CreatedAt = types.StringValue(found.CreatedAt)
+	config.Swarm = swarm.Value(ctx, found.SwarmBase, swarm.AttrTypes(true), &resp.Diagnostics)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &config)...)
 }

@@ -29,6 +29,7 @@ import (
 
 	"github.com/vanillauys/terraform-provider-dokploy/internal/lookup"
 	resourcedb "github.com/vanillauys/terraform-provider-dokploy/internal/resources/database"
+	"github.com/vanillauys/terraform-provider-dokploy/internal/swarm"
 )
 
 var (
@@ -197,6 +198,7 @@ func schemaAttributes(k resourcedb.Kind) map[string]schema.Attribute {
 		"memory_limit":       schema.StringAttribute{Computed: true, Description: "Hard memory limit in bytes, if any."},
 		"memory_reservation": schema.StringAttribute{Computed: true, Description: "Reserved memory in bytes, if any."},
 		"replicas":           schema.Int64Attribute{Computed: true, Description: "Number of container replicas."},
+		"swarm":              swarm.DataSourceAttribute(false),
 	}
 	if k.ReplicaSets {
 		attrs["replica_sets"] = schema.BoolAttribute{Computed: true, Description: "Whether " + k.HumanName + " runs as a replica set."}
@@ -261,6 +263,9 @@ type genericModel struct {
 	// The operational settings (#51), shared with the resource model.
 	resourcedb.Operational
 
+	// Swarm is the swarm block (#69), null when no column is set.
+	Swarm types.Object
+
 	// attrTypes is captured from the source Config's actual object type so
 	// setModel can rebuild a types.Object without independently re-deriving
 	// (and risking drift from) the schema's attribute-type map.
@@ -281,6 +286,7 @@ func applyObject(ctx context.Context, k resourcedb.Kind, obj *resourcedb.Object,
 	m.Status = types.StringValue(obj.ApplicationStatus)
 	m.CreatedAt = types.StringValue(obj.CreatedAt)
 	m.Operational = resourcedb.OperationalFromObject(ctx, k, obj, diags)
+	m.Swarm = swarm.Value(ctx, obj.Swarm, swarm.AttrTypes(false), diags)
 	if m.Credentials == nil {
 		m.Credentials = map[string]types.String{}
 	}
@@ -323,6 +329,7 @@ func getModel(ctx context.Context, k resourcedb.Kind, src getter) (genericModel,
 		Credentials:   map[string]types.String{},
 		attrTypes:     obj.AttributeTypes(ctx),
 		Operational:   resourcedb.OperationalFromAttributes(k, a),
+		Swarm:         a["swarm"].(types.Object),
 	}
 	for _, ca := range k.CredentialAttrs {
 		m.Credentials[ca.TFName] = a[ca.TFName].(types.String)
@@ -341,6 +348,7 @@ func setModel(ctx context.Context, dst setter, m genericModel) diag.Diagnostics 
 		"external_port":  m.ExternalPort,
 		"status":         m.Status,
 		"created_at":     m.CreatedAt,
+		"swarm":          m.Swarm,
 	}
 	m.PutValues(values, m.attrTypes)
 	for name, v := range m.Credentials {

@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/vanillauys/terraform-provider-dokploy/internal/client"
+	"github.com/vanillauys/terraform-provider-dokploy/internal/swarm"
 	"github.com/vanillauys/terraform-provider-dokploy/internal/tfutil"
 )
 
@@ -45,6 +46,9 @@ type dataSourceModel struct {
 	BuildRegistryID    types.String `tfsdk:"build_registry_id"`
 	CleanCache         types.Bool   `tfsdk:"clean_cache"`
 	DropBuildPath      types.String `tfsdk:"drop_build_path"`
+
+	// v1.8.0 (#69).
+	Swarm types.Object `tfsdk:"swarm"`
 }
 
 var previewAttrTypes = map[string]attr.Type{
@@ -135,6 +139,7 @@ func (d *applicationDataSource) Schema(_ context.Context, _ datasource.SchemaReq
 			"build_registry_id": schema.StringAttribute{Computed: true, Description: "Id of the registry that hands the image from a build server to the application server, or null."},
 			"clean_cache":       schema.BoolAttribute{Computed: true, Description: "Whether Dokploy builds without the Docker layer cache."},
 			"drop_build_path":   schema.StringAttribute{Computed: true, Description: "Path where Dokploy drops an uploaded build archive, or null."},
+			"swarm":             swarm.DataSourceAttribute(false),
 		},
 	}
 }
@@ -195,6 +200,7 @@ func (d *applicationDataSource) Read(ctx context.Context, req datasource.ReadReq
 	config.BuildRegistryID = tfutil.StringOrNull(app.BuildRegistryID)
 	config.CleanCache = types.BoolValue(app.CleanCache)
 	config.DropBuildPath = tfutil.StringOrNull(app.DropBuildPath)
+	config.Swarm = swarm.Value(ctx, app.Swarm, swarm.AttrTypes(false), &resp.Diagnostics)
 
 	labels := tfutil.StringListOrNull(ctx, app.PreviewLabels, &resp.Diagnostics)
 	preview, diags := types.ObjectValue(previewAttrTypes, map[string]attr.Value{
