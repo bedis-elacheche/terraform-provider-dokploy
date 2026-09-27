@@ -29,6 +29,13 @@ docker exec "$NAME" docker info >/dev/null 2>&1 || {
   exit 1
 }
 
+# install.sh exits with "This script must be run on Linux" when /.dockerenv
+# exists, its test for running inside a container, and the docker:dind image
+# has one. The inner dockerd is a full engine with its own swarm, which is
+# all the installer needs, so the marker goes. This only touches the
+# disposable sandbox.
+docker exec "$NAME" rm -f /.dockerenv
+
 # DOKPLOY_VERSION passes through to install.sh, which reads the same variable:
 # a release tag such as v0.30.4 installs that release, an empty or unset value
 # installs the latest stable release (the default, and what CI runs). This is
