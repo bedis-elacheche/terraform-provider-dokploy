@@ -48,6 +48,7 @@ import (
 
 	"github.com/vanillauys/terraform-provider-dokploy/internal/client"
 	"github.com/vanillauys/terraform-provider-dokploy/internal/deploy"
+	"github.com/vanillauys/terraform-provider-dokploy/internal/swarm"
 	"github.com/vanillauys/terraform-provider-dokploy/internal/tfutil"
 )
 
@@ -235,6 +236,7 @@ func (r *libsqlResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 			Description: "Detach the shared `dokploy-network` from this service. Defaults to `false`. " +
 				"It has an effect only together with `network_ids`, and it applies on the next deploy.",
 		},
+		"swarm": swarm.Attribute(true),
 		// status deliberately has NO UseStateForUnknown: a deploy moves it
 		// out of Terraform's control, so pinning the prior value as a known
 		// plan value makes core reject the apply with "Provider produced
@@ -478,7 +480,7 @@ func (r *libsqlResource) Create(ctx context.Context, req resource.CreateRequest,
 	// carries neither - so this one follow-up call is also what applies a
 	// first-apply network attachment; no separate call is needed for it.
 	var updateDiags diag.Diagnostics
-	updateReq := expandUpdate(ctx, &plan, password, &updateDiags)
+	updateReq := expandUpdate(ctx, &plan, password, types.ObjectNull(swarm.AttrTypes(true)), &updateDiags)
 	resp.Diagnostics.Append(updateDiags...)
 	if err := r.client.UpdateLibsql(ctx, updateReq); err != nil {
 		r.persistPartial(ctx, resp, plan, "applying the operational settings", err)
@@ -596,7 +598,7 @@ func (r *libsqlResource) Update(ctx context.Context, req resource.UpdateRequest,
 	// detach_dokploy_network: there is no separate network-attachment call
 	// to gate here, unlike the database package's conditional follow-up.
 	var updateDiags diag.Diagnostics
-	updateReq := expandUpdate(ctx, &plan, password, &updateDiags)
+	updateReq := expandUpdate(ctx, &plan, password, state.Swarm, &updateDiags)
 	resp.Diagnostics.Append(updateDiags...)
 	if err := r.client.UpdateLibsql(ctx, updateReq); err != nil {
 		resp.Diagnostics.AddError("Updating libsql service", err.Error())

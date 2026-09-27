@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/vanillauys/terraform-provider-dokploy/internal/client"
+	"github.com/vanillauys/terraform-provider-dokploy/internal/swarm"
 )
 
 func s(v string) *string { return &v }
@@ -118,7 +119,7 @@ func TestExpandUpdateNetworkFields(t *testing.T) {
 		DetachDokployNetwork: types.BoolValue(true),
 	}
 	var diags diag.Diagnostics
-	req := expandUpdate(ctx, m, m.DatabasePassword.ValueString(), &diags)
+	req := expandUpdate(ctx, m, m.DatabasePassword.ValueString(), types.ObjectNull(swarm.AttrTypes(true)), &diags)
 	if diags.HasError() {
 		t.Fatalf("diags: %v", diags)
 	}
@@ -139,13 +140,36 @@ func TestExpandUpdateNetworkFieldsNullMeansNil(t *testing.T) {
 	ctx := context.Background()
 	m := &resourceModel{NetworkIDs: types.SetNull(types.StringType)}
 	var diags diag.Diagnostics
-	req := expandUpdate(ctx, m, m.DatabasePassword.ValueString(), &diags)
+	req := expandUpdate(ctx, m, m.DatabasePassword.ValueString(), types.ObjectNull(swarm.AttrTypes(true)), &diags)
 	if diags.HasError() {
 		t.Fatalf("diags: %v", diags)
 	}
 
 	if req.NetworkIDs != nil {
 		t.Errorf("NetworkIDs = %v, want nil", req.NetworkIDs)
+	}
+}
+
+// TestExpandUpdateSwarm pins the three swarm cases on libsql.update: an
+// unmanaged block sends no swarm key, a set block sends its columns, and a
+// removed block sends nulls.
+func TestExpandUpdateSwarm(t *testing.T) {
+	ctx := context.Background()
+	var diags diag.Diagnostics
+	null := types.ObjectNull(swarm.AttrTypes(true))
+	set := swarm.Value(ctx, client.SwarmBase{LabelsSwarm: map[string]string{"a": "b"}}, swarm.AttrTypes(true), &diags)
+
+	if req := expandUpdate(ctx, &resourceModel{Swarm: null}, "", null, &diags); req.SwarmBase != nil {
+		t.Errorf("unmanaged block: SwarmBase = %+v, want nil", req.SwarmBase)
+	}
+	if req := expandUpdate(ctx, &resourceModel{Swarm: set}, "", null, &diags); req.SwarmBase == nil || req.LabelsSwarm["a"] != "b" {
+		t.Errorf("set block: SwarmBase = %+v, want the labels", req.SwarmBase)
+	}
+	if req := expandUpdate(ctx, &resourceModel{Swarm: null}, "", set, &diags); req.SwarmBase == nil || req.LabelsSwarm != nil {
+		t.Errorf("removed block: SwarmBase = %+v, want every column nil", req.SwarmBase)
+	}
+	if diags.HasError() {
+		t.Fatal(diags)
 	}
 }
 

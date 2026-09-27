@@ -7,6 +7,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/vanillauys/terraform-provider-dokploy/internal/client"
+	"github.com/vanillauys/terraform-provider-dokploy/internal/swarm"
 	"github.com/vanillauys/terraform-provider-dokploy/internal/tfutil"
 )
 
@@ -51,6 +52,9 @@ type resourceModel struct {
 	// internal/resources/database).
 	NetworkIDs           types.Set  `tfsdk:"network_ids"`
 	DetachDokployNetwork types.Bool `tfsdk:"detach_dokploy_network"`
+
+	// Swarm is the eight-column swarm block (#69, internal/swarm).
+	Swarm types.Object `tfsdk:"swarm"`
 }
 
 // flatten maps the full API object into the model (Read/refresh). It takes
@@ -58,6 +62,9 @@ type resourceModel struct {
 // tfutil.StringSetOrNull needs both to build the network_ids set; every
 // other field here is a plain scalar copy.
 func flatten(ctx context.Context, c *client.Libsql, m *resourceModel, diags *diag.Diagnostics) {
+	// The read after an import starts from a state that holds only the id.
+	importing := m.Name.IsNull()
+	m.Swarm = swarm.Read(ctx, c.SwarmBase, m.Swarm, importing, swarm.AttrTypes(true), diags)
 	m.ID = types.StringValue(c.LibsqlID)
 	m.Name = types.StringValue(c.Name)
 	m.AppName = types.StringValue(c.AppName)
@@ -139,7 +146,9 @@ func expandCreate(m *resourceModel, password string) client.CreateLibsqlRequest 
 // read the network_ids set; every other field here is a plain scalar read.
 // password comes from tfutil.SecretToUpdate; "" means "nothing to send", and
 // the request's omitempty then drops the key, which keeps the stored value.
-func expandUpdate(ctx context.Context, m *resourceModel, password string, diags *diag.Diagnostics) client.UpdateLibsqlRequest {
+// priorSwarm is the swarm block in the state (null on create), which
+// swarm.Expand needs to tell an unmanaged block from a removed one.
+func expandUpdate(ctx context.Context, m *resourceModel, password string, priorSwarm types.Object, diags *diag.Diagnostics) client.UpdateLibsqlRequest {
 	enable := m.EnableNamespaces.ValueBool()
 	replicas := m.Replicas.ValueInt64()
 	return client.UpdateLibsqlRequest{
@@ -160,5 +169,6 @@ func expandUpdate(ctx context.Context, m *resourceModel, password string, diags 
 		Replicas:             &replicas,
 		NetworkIDs:           tfutil.StringSetRequest(ctx, m.NetworkIDs, diags),
 		DetachDokployNetwork: m.DetachDokployNetwork.ValueBool(),
+		SwarmBase:            swarm.Expand[client.SwarmBase](ctx, m.Swarm, priorSwarm, diags),
 	}
 }

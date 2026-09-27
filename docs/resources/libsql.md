@@ -82,6 +82,7 @@ resource "dokploy_libsql" "replica" {
 - `server_id` (String) Id of the remote server that runs the service. Defaults to the Dokploy host.
 - `sqld_node` (String) Topology role: `primary` or `replica`. A replica requires `sqld_primary_url`, and cannot have any external port. On Dokploy v0.30.5 the stored role alone does not make the container replicate; set `command` as the resource note describes.
 - `sqld_primary_url` (String) URL of the primary sqld node, for example `http://<primary app_name>:5001`. Required when `sqld_node` is `replica`. The server rejects it when `sqld_node` is not `replica`, which includes the default `primary`. Dokploy passes it to the container as `SQLD_PRIMARY_URL`, which `sqld` does not read; see `command`.
+- `swarm` (Attributes) Docker Swarm service settings, applied on the next deploy (a change starts one when `deploy_on_change` is true). Omit the block to leave these settings unmanaged: the provider does not read or write them, and values set in the Dokploy UI stay. When the block is set it owns every setting in it, and an attribute you omit is cleared back to the Dokploy default. Removing the block clears them all. libsql deploys eight of the Docker settings: it ignores the stop grace period and the endpoint spec, and has no ulimits. (see [below for nested schema](#nestedatt--swarm))
 
 ### Read-Only
 
@@ -89,6 +90,148 @@ resource "dokploy_libsql" "replica" {
 - `created_at` (String) Creation timestamp from the server.
 - `id` (String) LibSQL service id.
 - `status` (String) Service status from Dokploy.
+
+<a id="nestedatt--swarm"></a>
+### Nested Schema for `swarm`
+
+Optional:
+
+- `health_check` (Attributes) Health check, replacing the image's `HEALTHCHECK`. (see [below for nested schema](#nestedatt--swarm--health_check))
+- `labels` (Map of String) Labels on the service's containers.
+- `mode` (Attributes) Service mode. Set exactly one of the four attributes. When set, it replaces the `replicas` attribute of the resource. (see [below for nested schema](#nestedatt--swarm--mode))
+- `network` (Attributes List) Networks to attach, with aliases and driver options. When set, Dokploy attaches exactly these networks: `dokploy-network` is not added, so list it here if the service needs Traefik routing. It cannot be combined with `network_ids` or `detach_dokploy_network`. (see [below for nested schema](#nestedatt--swarm--network))
+- `placement` (Attributes) Where the service's tasks run. (see [below for nested schema](#nestedatt--swarm--placement))
+- `restart_policy` (Attributes) When Docker restarts the service's tasks. (see [below for nested schema](#nestedatt--swarm--restart_policy))
+- `rollback_config` (Attributes) How Docker rolls back the service's tasks. (see [below for nested schema](#nestedatt--swarm--rollback_config))
+- `update_config` (Attributes) How Docker updates the service's tasks. (see [below for nested schema](#nestedatt--swarm--update_config))
+
+<a id="nestedatt--swarm--health_check"></a>
+### Nested Schema for `swarm.health_check`
+
+Optional:
+
+- `interval` (Number) Time between checks. In nanoseconds: `10000000000` is 10 seconds.
+- `retries` (Number) Consecutive failures that make the task unhealthy.
+- `start_period` (Number) Start-up time during which failures do not count. In nanoseconds: `10000000000` is 10 seconds.
+- `test` (List of String) Command, in Docker's form: `["CMD", "curl", "-f", "http://localhost"]`, `["CMD-SHELL", "..."]`, or `["NONE"]`. An empty list is not valid. Omit the attribute instead.
+- `timeout` (Number) Time a check may take. In nanoseconds: `10000000000` is 10 seconds.
+
+
+<a id="nestedatt--swarm--mode"></a>
+### Nested Schema for `swarm.mode`
+
+Optional:
+
+- `global` (Attributes) Run one task on every node. Write it as `{}`. (see [below for nested schema](#nestedatt--swarm--mode--global))
+- `global_job` (Attributes) Run a job once on every node. Write it as `{}`. (see [below for nested schema](#nestedatt--swarm--mode--global_job))
+- `replicated` (Attributes) Run a fixed number of tasks. (see [below for nested schema](#nestedatt--swarm--mode--replicated))
+- `replicated_job` (Attributes) Run a job to completion. (see [below for nested schema](#nestedatt--swarm--mode--replicated_job))
+
+<a id="nestedatt--swarm--mode--global"></a>
+### Nested Schema for `swarm.mode.global`
+
+
+<a id="nestedatt--swarm--mode--global_job"></a>
+### Nested Schema for `swarm.mode.global_job`
+
+
+<a id="nestedatt--swarm--mode--replicated"></a>
+### Nested Schema for `swarm.mode.replicated`
+
+Optional:
+
+- `replicas` (Number) Number of tasks.
+
+
+<a id="nestedatt--swarm--mode--replicated_job"></a>
+### Nested Schema for `swarm.mode.replicated_job`
+
+Optional:
+
+- `max_concurrent` (Number) Tasks that run at once.
+- `total_completions` (Number) Tasks that must complete.
+
+
+
+<a id="nestedatt--swarm--network"></a>
+### Nested Schema for `swarm.network`
+
+Optional:
+
+- `aliases` (List of String) DNS aliases of the service on this network. An empty list is not valid. Omit the attribute instead.
+- `driver_opts` (Map of String) Network driver options. An empty map is not valid. Omit the attribute instead.
+- `target` (String) Network name or id.
+
+
+<a id="nestedatt--swarm--placement"></a>
+### Nested Schema for `swarm.placement`
+
+Optional:
+
+- `constraints` (List of String) Placement constraints, for example `node.labels.tier == app`. An empty list is not valid. Omit the attribute instead.
+- `max_replicas` (Number) Maximum tasks per node. `0` means no limit.
+- `platforms` (Attributes List) Platforms the tasks may run on. An empty list is not valid. Omit the attribute instead. (see [below for nested schema](#nestedatt--swarm--placement--platforms))
+- `preferences` (Attributes List) Spread preferences, applied in order. An empty list is not valid. Omit the attribute instead. (see [below for nested schema](#nestedatt--swarm--placement--preferences))
+
+<a id="nestedatt--swarm--placement--platforms"></a>
+### Nested Schema for `swarm.placement.platforms`
+
+Required:
+
+- `architecture` (String) CPU architecture, for example `amd64`.
+- `os` (String) Operating system, for example `linux`.
+
+
+<a id="nestedatt--swarm--placement--preferences"></a>
+### Nested Schema for `swarm.placement.preferences`
+
+Required:
+
+- `spread` (String) Label to spread tasks over, for example `node.labels.zone`.
+
+
+
+<a id="nestedatt--swarm--restart_policy"></a>
+### Nested Schema for `swarm.restart_policy`
+
+Optional:
+
+- `condition` (String) `none`, `on-failure`, or `any`.
+- `delay` (Number) Wait between restart attempts. In nanoseconds: `10000000000` is 10 seconds.
+- `max_attempts` (Number) Restart attempts before giving up. `0` means no limit.
+- `window` (Number) Time used to decide whether a restart succeeded. In nanoseconds: `10000000000` is 10 seconds.
+
+
+<a id="nestedatt--swarm--rollback_config"></a>
+### Nested Schema for `swarm.rollback_config`
+
+Required:
+
+- `order` (String) `stop-first` or `start-first`.
+- `parallelism` (Number) Tasks to roll back at once. `0` means all at once.
+
+Optional:
+
+- `delay` (Number) Wait between batches. In nanoseconds: `10000000000` is 10 seconds.
+- `failure_action` (String) What to do when a task fails: `pause`, `continue`, or `rollback`.
+- `max_failure_ratio` (Number) Fraction of tasks that may fail before `failure_action` applies.
+- `monitor` (Number) How long to watch each task for failure after it starts. In nanoseconds: `10000000000` is 10 seconds.
+
+
+<a id="nestedatt--swarm--update_config"></a>
+### Nested Schema for `swarm.update_config`
+
+Required:
+
+- `order` (String) `stop-first` or `start-first`.
+- `parallelism` (Number) Tasks to update at once. `0` means all at once.
+
+Optional:
+
+- `delay` (Number) Wait between batches. In nanoseconds: `10000000000` is 10 seconds.
+- `failure_action` (String) What to do when a task fails: `pause`, `continue`, or `rollback`.
+- `max_failure_ratio` (Number) Fraction of tasks that may fail before `failure_action` applies.
+- `monitor` (Number) How long to watch each task for failure after it starts. In nanoseconds: `10000000000` is 10 seconds.
 
 ## Import
 
