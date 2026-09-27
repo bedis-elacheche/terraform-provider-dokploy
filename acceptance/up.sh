@@ -7,7 +7,10 @@ set -euo pipefail
 NAME="${DOKPLOY_ACC_CONTAINER:-dokploy-acc}"
 PORT="${DOKPLOY_ACC_PORT:-3000}"
 
-docker rm -f "$NAME" >/dev/null 2>&1 || true
+# -v: the dind image keeps /var/lib/docker in an anonymous volume, several GB
+# once Dokploy is installed, which a plain rm leaves behind on every re-run.
+docker rm -fv "$NAME" >/dev/null 2>&1 || true
+
 # DOCKER_IGNORE_BR_NETFILTER_ERROR: this host's kernel doesn't have the
 # br_netfilter module loaded, so /proc/sys/net/bridge/bridge-nf-call-iptables
 # doesn't exist inside the nested dockerd either. Without this, the inner
