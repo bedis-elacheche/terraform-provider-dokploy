@@ -11,6 +11,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- A `swarm` block on `dokploy_application`, the five database resources
+  (`dokploy_postgres`, `dokploy_mysql`, `dokploy_mariadb`, `dokploy_mongo`,
+  `dokploy_redis`) and `dokploy_libsql` (#69): the Docker Swarm service
+  settings that Dokploy stores per service and applies on the next deploy.
+  It has one typed attribute per Dokploy column: `health_check`,
+  `restart_policy`, `placement`, `update_config`, `rollback_config`,
+  `mode`, `labels`, `network`, `stop_grace_period`, `endpoint_spec` and
+  `ulimits`. Durations are in nanoseconds, as in the Docker API. The
+  Docker vocabularies (`order`, `failure_action`, `condition`, the endpoint
+  and port modes) are checked at plan time, because Dokploy stores any
+  string and the next deploy fails. `dokploy_libsql` takes eight of them: its
+  deploy ignores `stop_grace_period` and `endpoint_spec`, and it has no
+  `ulimits`. A change starts a redeploy when `deploy_on_change` is true.
+- Omitting the block leaves the swarm settings unmanaged: the provider does
+  not send them, and values set in the Dokploy UI stay. A block that is set
+  owns every setting in it, and removing it clears them all. An import fills
+  the block from the server. A resource created before v1.8.0 plans no
+  change.
+- `swarm` on the `dokploy_application`, database and `dokploy_libsql` data
+  sources, null when no setting is stored.
+
 ## [1.7.0] - 2026-09-19
 
 ### Added

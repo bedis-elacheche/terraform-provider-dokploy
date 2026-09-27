@@ -142,8 +142,9 @@ These three problems cause the most failures:
 The provider does not model these Dokploy features yet.
 
 - **Some Dokploy settings have no resource.** Manage DNS providers, the
-  Traefik configuration files, tags, and the Docker Swarm placement fields
-  of a service in the Dokploy UI. `dokploy_application` holds the preview
+  Traefik configuration files, and tags in the Dokploy UI. The Docker Swarm
+  settings of a compose service go in its compose file: Dokploy has no swarm
+  columns on compose. `dokploy_application` holds the preview
   deployment and rollback settings, but the preview deployment records and
   the rollback itself are imperative operations of the UI.
 - **`dokploy_server` stores the record only.** It does not run the setup that

@@ -16,6 +16,32 @@ resource "dokploy_application" "example" {
   # network_ids = ["<dokploy-network-id>"]
 }
 
+# Docker Swarm service settings: two replicas on the nodes labelled for the
+# app tier, rolled one at a time with the new task started first. Durations
+# are nanoseconds. Omit the block to manage these settings in the Dokploy UI.
+resource "dokploy_application" "with_swarm" {
+  name           = "api"
+  environment_id = dokploy_project.example.production_environment_id
+
+  docker = {
+    image = "traefik/whoami:v1.10"
+  }
+
+  swarm = {
+    mode = { replicated = { replicas = 2 } }
+    placement = {
+      constraints = ["node.labels.tier == app"]
+    }
+    update_config = {
+      parallelism    = 1
+      order          = "start-first"
+      failure_action = "rollback"
+      monitor        = 10000000000
+    }
+    stop_grace_period = 30000000000
+  }
+}
+
 # Preview deployments for each pull request of a GitHub source, a rollback
 # image per deploy, and a build on a separate build server.
 resource "dokploy_application" "with_previews" {

@@ -1734,3 +1734,40 @@ package client
 // absent key is the dialect A 400 "expected nonoptional, received
 // undefined". So the resource sends the full object on every update, and a
 // write-only secret with nothing new to send resends the stored value.
+//
+// # v1.8.0 records (probed 2026-09-27 on a v0.30.7 rig)
+//
+// ## The swarm columns (#69)
+//
+// application.update and the five engines' .update accept eleven *Swarm
+// columns; libsql.update accepts ten (no ulimitsSwarm); compose.update
+// accepts none. The shapes are the zod schemas of packages/server/src/db/
+// schema/shared.ts at the v0.30.7 tag (commit 531b2c7), modelled in
+// swarm.go. Every column is a drizzle `json` with no default, `.nullable()`
+// on update. Durations are Docker Engine API nanoseconds and pass to
+// dockerode unchanged. No string key is an enum on the server.
+//
+// Probed live on application.update:
+//
+//   - a fresh record reads back null on all eleven;
+//   - a column reads back as sent, with its keys in schema order rather
+//     than request order (placementSwarm sent Preferences first, read back
+//     Constraints first);
+//   - an absent key keeps the stored value, and a null clears it (dialect B);
+//   - an unknown key inside a column is an HTTP 400 "Unrecognized key"
+//     (.strict()), but updateConfigSwarm {Order: "nonsense"} is stored, so
+//     the provider validates the Docker vocabularies at plan time;
+//   - a null key inside a column is accepted and stored as 0
+//     (placementSwarm {MaxReplicas: null} read back {MaxReplicas: 0}), so
+//     every key inside a column is omitempty;
+//   - no column starts a deploy. application.deploy writes them into the
+//     service spec: docker service inspect showed the placement, update
+//     config, container labels, stop grace period, ulimits and health check
+//     as sent.
+//
+// Read from the deploy builders (packages/server/src/utils/builders and
+// utils/databases): a null column means Dokploy's own default (updateConfig
+// {Parallelism: 1, Order: "start-first", FailureAction: "rollback"} on an
+// application); networkSwarm, when set, replaces dokploy-network and every
+// networkIds entry; libsql's builder ignores stopGracePeriodSwarm and
+// endpointSpecSwarm.
