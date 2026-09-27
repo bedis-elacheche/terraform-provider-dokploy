@@ -103,6 +103,9 @@ type Application struct {
 	ApplicationRollback
 	ApplicationBuildSettings
 
+	// The swarm settings (#69); see swarm.go.
+	Swarm
+
 	// Embedded child collections. redirects.create and security.create
 	// return `true` rather than the record, so these arrays are the only
 	// way to discover a newly created id (see createAndLocate); there is no
@@ -169,6 +172,10 @@ type UpdateApplicationRequest struct {
 	ApplicationPreviewUpdate
 	ApplicationRollback
 	ApplicationBuildSettings
+
+	// The swarm settings (#69). A nil pointer leaves every swarm key out of
+	// the body, so the stored columns stay (dialect B); see swarm.go.
+	*Swarm
 }
 
 // SaveGithubProviderRequest.

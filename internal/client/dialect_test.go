@@ -49,6 +49,15 @@ var mustAlwaysSend = []struct {
 		"rollbackActive", "rollbackRegistryId",
 		"buildServerId", "buildRegistryId", "cleanCache", "dropBuildPath",
 	}},
+	// The swarm columns (#69) clear with an explicit null once the block is
+	// managed; the embedded pointer drops them all when it is not.
+	{UpdateApplicationRequest{}, swarmFields},
+	{UpdatePostgresRequest{}, swarmFields},
+	{UpdateMysqlRequest{}, swarmFields},
+	{UpdateMariadbRequest{}, swarmFields},
+	{UpdateRedisRequest{}, swarmFields},
+	{UpdateMongoRequest{}, swarmFields},
+	{UpdateLibsqlRequest{}, swarmFields[:8]},
 	{UpdateDomainRequest{}, []string{
 		"host", "path", "internalPath", "port", "https", "stripPath",
 		"certificateType", "customCertResolver", "customEntrypoint",
@@ -139,6 +148,14 @@ var mustAlwaysSend = []struct {
 	}},
 }
 
+// swarmFields lists the SwarmBase columns first, so libsql takes the
+// first eight.
+var swarmFields = []string{
+	"healthCheckSwarm", "restartPolicySwarm", "placementSwarm", "updateConfigSwarm",
+	"rollbackConfigSwarm", "modeSwarm", "labelsSwarm", "networkSwarm",
+	"stopGracePeriodSwarm", "endpointSpecSwarm", "ulimitsSwarm",
+}
+
 // inMustAlwaysSend reports whether a request struct is registered above. It
 // is what stops a new dialect A endpoint from reaching the server with no
 // omitempty guard at all — the exact gap the five entries above just closed.
@@ -176,14 +193,19 @@ func TestRequestStructsNeverOmitMustSendFields(t *testing.T) {
 
 // jsonFields lists the fields a struct marshals, descending into an
 // embedded struct the way encoding/json flattens it (NotificationBase in
-// the notification requests). An embedded struct with its own json tag is
-// a nested object, not a flattening, and is returned as one field.
+// the notification requests), or into an embedded struct pointer (*Swarm
+// in the update requests). An embedded struct with its own json tag is a
+// nested object, not a flattening, and is returned as one field.
 func jsonFields(t reflect.Type) []reflect.StructField {
 	var out []reflect.StructField
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
-		if f.Anonymous && f.Type.Kind() == reflect.Struct && f.Tag.Get("json") == "" {
-			out = append(out, jsonFields(f.Type)...)
+		ft := f.Type
+		if ft.Kind() == reflect.Pointer {
+			ft = ft.Elem()
+		}
+		if f.Anonymous && ft.Kind() == reflect.Struct && f.Tag.Get("json") == "" {
+			out = append(out, jsonFields(ft)...)
 			continue
 		}
 		out = append(out, f)

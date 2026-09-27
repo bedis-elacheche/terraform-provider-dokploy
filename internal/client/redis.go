@@ -48,6 +48,9 @@ type Redis struct {
 	// The operational settings (#51); see ServiceResources.
 	ServiceResources
 
+	// The swarm settings (#69); see swarm.go.
+	Swarm
+
 	ServerID  *string `json:"serverId"`
 	CreatedAt string  `json:"createdAt"`
 }
@@ -105,6 +108,10 @@ type UpdateRedisRequest struct {
 
 	// The operational settings (#51); see ServiceResourcesUpdate.
 	ServiceResourcesUpdate
+
+	// The swarm settings (#69). A nil pointer leaves every swarm key out of
+	// the body, so the stored columns stay (dialect B); see swarm.go.
+	*Swarm
 }
 
 func (c *Client) CreateRedis(ctx context.Context, req CreateRedisRequest) (*Redis, error) {

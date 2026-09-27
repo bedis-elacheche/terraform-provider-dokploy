@@ -36,6 +36,9 @@ type Mariadb struct {
 	// The operational settings (#51); see ServiceResources.
 	ServiceResources
 
+	// The swarm settings (#69); see swarm.go.
+	Swarm
+
 	ServerID  *string `json:"serverId"`
 	CreatedAt string  `json:"createdAt"`
 }
@@ -101,6 +104,10 @@ type UpdateMariadbRequest struct {
 
 	// The operational settings (#51); see ServiceResourcesUpdate.
 	ServiceResourcesUpdate
+
+	// The swarm settings (#69). A nil pointer leaves every swarm key out of
+	// the body, so the stored columns stay (dialect B); see swarm.go.
+	*Swarm
 }
 
 func (c *Client) CreateMariadb(ctx context.Context, req CreateMariadbRequest) (*Mariadb, error) {
