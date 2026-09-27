@@ -25,6 +25,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/vanillauys/terraform-provider-dokploy/internal/client"
+	"github.com/vanillauys/terraform-provider-dokploy/internal/swarm"
 	"github.com/vanillauys/terraform-provider-dokploy/internal/deploy"
 	"github.com/vanillauys/terraform-provider-dokploy/internal/tfutil"
 )
@@ -391,6 +392,7 @@ func (r *applicationResource) Schema(_ context.Context, _ resource.SchemaRequest
 				},
 			},
 		},
+		"swarm": swarm.Attribute(false),
 		"build_server_id": schema.StringAttribute{
 			Optional:    true,
 			Description: "Id of the `dokploy_server` with `server_type = \"build\"` that builds the image. Omit it to build on the server that runs the application.",
@@ -703,7 +705,7 @@ func (r *applicationResource) Create(ctx context.Context, req resource.CreateReq
 	// args set in configuration are silently ignored on the FIRST apply and
 	// only take effect on a later one — caught by
 	// TestAccApplication_operationalAttributes step 1.
-	if req, d := updateRequest(ctx, created.ApplicationID, plan, cfg); !d.HasError() {
+	if req, d := updateRequest(ctx, created.ApplicationID, plan, cfg, types.ObjectNull(swarm.AttrTypes(false))); !d.HasError() {
 		if err := r.client.UpdateApplication(ctx, req); err != nil {
 			r.persistPartial(ctx, resp, plan, "applying operational settings", err)
 			return
@@ -794,7 +796,7 @@ func (r *applicationResource) Update(ctx context.Context, req resource.UpdateReq
 	// the model on every call, and this guard only decides WHETHER to call.
 	if !plan.Name.Equal(state.Name) || !plan.Description.Equal(state.Description) ||
 		operationalChanged(plan, state) {
-		req, d := updateRequest(ctx, id, plan, cfg)
+		req, d := updateRequest(ctx, id, plan, cfg, state.Swarm)
 		resp.Diagnostics.Append(d...)
 		if resp.Diagnostics.HasError() {
 			return

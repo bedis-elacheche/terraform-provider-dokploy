@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/vanillauys/terraform-provider-dokploy/internal/client"
+	"github.com/vanillauys/terraform-provider-dokploy/internal/swarm"
 )
 
 func previewObject(t *testing.T, p previewModel) types.Object {
@@ -230,8 +231,9 @@ func TestUpdateRequestReadsEveryFieldFromTheModel(t *testing.T) {
 		BuildRegistryID: types.StringValue("reg-3"),
 		CleanCache:      types.BoolValue(true),
 		DropBuildPath:   types.StringValue("/drop"),
+		Swarm:           fullSwarm(t),
 	}
-	req, d := updateRequest(ctx, "app1", m, m)
+	req, d := updateRequest(ctx, "app1", m, m, types.ObjectNull(swarm.AttrTypes(false)))
 	if d.HasError() {
 		t.Fatal(d)
 	}
@@ -240,6 +242,13 @@ func TestUpdateRequestReadsEveryFieldFromTheModel(t *testing.T) {
 		for i := 0; i < v.NumField(); i++ {
 			f, ft := v.Field(i), v.Type().Field(i)
 			if ft.Anonymous {
+				if f.Kind() == reflect.Pointer {
+					if f.IsNil() {
+						t.Errorf("%s%s is unset despite a fully populated model; the resource can never write it", prefix, ft.Name)
+						continue
+					}
+					f = f.Elem()
+				}
 				check(f, ft.Name+".")
 				continue
 			}
@@ -253,4 +262,31 @@ func TestUpdateRequestReadsEveryFieldFromTheModel(t *testing.T) {
 		}
 	}
 	check(reflect.ValueOf(req), "")
+}
+
+// fullSwarm sets every swarm column, so the update body carries all eleven.
+func fullSwarm(t *testing.T) types.Object {
+	t.Helper()
+	n := int64(1)
+	s := "x"
+	var diags diag.Diagnostics
+	obj := swarm.Value(context.Background(), client.Swarm{
+		SwarmBase: client.SwarmBase{
+			HealthCheckSwarm:    &client.SwarmHealthCheck{Retries: &n},
+			RestartPolicySwarm:  &client.SwarmRestartPolicy{Delay: &n},
+			PlacementSwarm:      &client.SwarmPlacement{MaxReplicas: &n},
+			UpdateConfigSwarm:   &client.SwarmUpdateConfig{Parallelism: 1, Order: "start-first"},
+			RollbackConfigSwarm: &client.SwarmUpdateConfig{Parallelism: 1, Order: "stop-first"},
+			ModeSwarm:           &client.SwarmMode{Global: &client.SwarmEmpty{}},
+			LabelsSwarm:         map[string]string{"a": "b"},
+			NetworkSwarm:        []client.SwarmNetwork{{Target: &s}},
+		},
+		StopGracePeriodSwarm: &n,
+		EndpointSpecSwarm:    &client.SwarmEndpointSpec{Mode: &s},
+		UlimitsSwarm:         []client.SwarmUlimit{{Name: "nofile", Soft: 1, Hard: 1}},
+	}, swarm.AttrTypes(false), &diags)
+	if diags.HasError() {
+		t.Fatal(diags)
+	}
+	return obj
 }

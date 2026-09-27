@@ -120,7 +120,7 @@ func Attribute(libsql bool) schema.SingleNestedAttribute {
 		}),
 		"update_config":   updateConfig("update", "updates"),
 		"rollback_config": updateConfig("roll back", "rolls back"),
-		"mode": object("Service mode. Set exactly one of the four attributes.", map[string]schema.Attribute{
+		"mode": object("Service mode. Set exactly one of the four attributes. When set, it replaces the `replicas` attribute of the resource.", map[string]schema.Attribute{
 			"replicated": schema.SingleNestedAttribute{
 				Optional:    true,
 				Description: "Run a fixed number of tasks.",

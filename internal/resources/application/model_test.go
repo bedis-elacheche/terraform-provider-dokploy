@@ -156,6 +156,11 @@ func TestDeployNeededApplication(t *testing.T) {
 	if !deployNeeded(plan, state) {
 		t.Error("env change must trigger a deploy")
 	}
+	plan = base()
+	plan.Swarm = fullSwarm(t)
+	if !deployNeeded(plan, state) || !operationalChanged(plan, state) {
+		t.Error("swarm change must reach application.update and trigger a deploy")
+	}
 }
 
 // unchangedExceptStatus gates ModifyPlan's decision to carry the prior

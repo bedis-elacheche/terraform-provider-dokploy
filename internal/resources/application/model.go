@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 
 	"github.com/vanillauys/terraform-provider-dokploy/internal/client"
+	"github.com/vanillauys/terraform-provider-dokploy/internal/swarm"
 	"github.com/vanillauys/terraform-provider-dokploy/internal/tfutil"
 )
 
@@ -62,6 +63,9 @@ type resourceModel struct {
 	BuildRegistryID    types.String `tfsdk:"build_registry_id"`
 	CleanCache         types.Bool   `tfsdk:"clean_cache"`
 	DropBuildPath      types.String `tfsdk:"drop_build_path"`
+
+	// v1.8.0 (#69): the Docker Swarm settings (internal/swarm).
+	Swarm types.Object `tfsdk:"swarm"`
 }
 
 type githubModel struct {
@@ -171,7 +175,8 @@ var buildAttrTypes = map[string]attr.Type{
 // deployNeeded: sources, build settings, env and build args trigger deploys.
 // network_ids / detach_dokploy_network are here too: the v0.30.0 release
 // notes say a network attachment change only takes effect on the next
-// deploy.
+// deploy. So is swarm: Dokploy stores the columns and writes them into the
+// service spec only on the next deploy.
 func deployNeeded(plan, state resourceModel) bool {
 	return !plan.Github.Equal(state.Github) ||
 		!plan.Git.Equal(state.Git) ||
@@ -187,7 +192,8 @@ func deployNeeded(plan, state resourceModel) bool {
 		!plan.WatchPaths.Equal(state.WatchPaths) ||
 		!plan.EnableSubmodules.Equal(state.EnableSubmodules) ||
 		!plan.NetworkIDs.Equal(state.NetworkIDs) ||
-		!plan.DetachDokployNetwork.Equal(state.DetachDokployNetwork)
+		!plan.DetachDokployNetwork.Equal(state.DetachDokployNetwork) ||
+		!plan.Swarm.Equal(state.Swarm)
 }
 
 // unchangedExceptStatus reports whether plan and state agree on every
@@ -240,7 +246,8 @@ func unchangedExceptStatus(plan, state resourceModel) bool {
 		plan.BuildServerID.Equal(state.BuildServerID) &&
 		plan.BuildRegistryID.Equal(state.BuildRegistryID) &&
 		plan.CleanCache.Equal(state.CleanCache) &&
-		plan.DropBuildPath.Equal(state.DropBuildPath)
+		plan.DropBuildPath.Equal(state.DropBuildPath) &&
+		plan.Swarm.Equal(state.Swarm)
 }
 
 // strOrNull treats null and "" alike as unset. See tfutil.StringOrNull for
@@ -424,14 +431,17 @@ func operationalChanged(plan, state resourceModel) bool {
 		!plan.Args.Equal(state.Args) ||
 		!plan.RegistryID.Equal(state.RegistryID) ||
 		!plan.NetworkIDs.Equal(state.NetworkIDs) ||
-		!plan.DetachDokployNetwork.Equal(state.DetachDokployNetwork)
+		!plan.DetachDokployNetwork.Equal(state.DetachDokployNetwork) ||
+		!plan.Swarm.Equal(state.Swarm)
 }
 
 // updateRequest builds the application.update body. Dialect B: every key is
 // sent explicitly so a nil pointer clears the field rather than silently
 // preserving it. cfg is the config model, which alone carries the
-// write-only preview build secret (see previewRequest).
-func updateRequest(ctx context.Context, id string, m, cfg resourceModel) (client.UpdateApplicationRequest, diag.Diagnostics) {
+// write-only preview build secret (see previewRequest). priorSwarm is the
+// swarm block in the state (null on create): the one exception to "send
+// everything", since a null block leaves the swarm keys out (swarm.Expand).
+func updateRequest(ctx context.Context, id string, m, cfg resourceModel, priorSwarm types.Object) (client.UpdateApplicationRequest, diag.Diagnostics) {
 	var diags diag.Diagnostics
 	return client.UpdateApplicationRequest{
 		Title:                    m.Title.ValueStringPointer(),
@@ -439,6 +449,7 @@ func updateRequest(ctx context.Context, id string, m, cfg resourceModel) (client
 		ApplicationPreviewUpdate: previewRequest(ctx, m.PreviewDeployments, cfg.PreviewDeployments, &diags),
 		ApplicationRollback:      rollbackRequest(ctx, m.Rollback, &diags),
 		ApplicationBuildSettings: buildSettingsRequest(m),
+		Swarm:                    swarm.Expand[client.Swarm](ctx, m.Swarm, priorSwarm, &diags),
 
 		ApplicationID:        id,
 		Name:                 m.Name.ValueString(),
@@ -525,6 +536,9 @@ func flattenBuild(ctx context.Context, app *client.Application) (types.Object, d
 // active source block is populated, the others become null.
 func flatten(ctx context.Context, app *client.Application, m *resourceModel) diag.Diagnostics {
 	var diags diag.Diagnostics
+	// The read after an import starts from a state that holds only the id.
+	importing := m.Name.IsNull()
+	m.Swarm = swarm.Read(ctx, app.Swarm, m.Swarm, importing, swarm.AttrTypes(false), &diags)
 	m.ID = types.StringValue(app.ApplicationID)
 	m.Name = types.StringValue(app.Name)
 	m.Description = strOrNull(app.Description)
