@@ -2,6 +2,9 @@ package tfutil
 
 import (
 	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -289,5 +292,46 @@ func TestAppNameSeed(t *testing.T) {
 		if got := AppNameSeed(tc.prefix, name); got != tc.want {
 			t.Errorf("%s: AppNameSeed = %q, want %q", label, got, tc.want)
 		}
+	}
+}
+
+// ApplyShare calls gitProvider.toggleShare only for a known value that
+// differs from the server, and the body always carries the flag: an absent
+// key stores false.
+func TestApplyShare(t *testing.T) {
+	var bodies []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/gitProvider.toggleShare" {
+			t.Errorf("request = %s %s, want POST /api/gitProvider.toggleShare", r.Method, r.URL.Path)
+		}
+		b, _ := io.ReadAll(r.Body)
+		bodies = append(bodies, string(b))
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	c, err := client.New(srv.URL, "test-key", false, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	var diags diag.Diagnostics
+
+	gp := &client.GitProvider{GitProviderID: "gp1", SharedWithOrganization: true}
+	for _, want := range []types.Bool{types.BoolNull(), types.BoolUnknown(), types.BoolValue(true)} {
+		if ApplyShare(ctx, &diags, c, gp, want); !gp.SharedWithOrganization {
+			t.Errorf("want %v: the flag changed to false", want)
+		}
+	}
+	if len(bodies) != 0 {
+		t.Fatalf("calls = %v, want none", bodies)
+	}
+	if ApplyShare(ctx, &diags, c, gp, types.BoolValue(false)); gp.SharedWithOrganization {
+		t.Error("the flag is still true, want false")
+	}
+	if len(bodies) != 1 || bodies[0] != `{"gitProviderId":"gp1","sharedWithOrganization":false}` {
+		t.Errorf("bodies = %v", bodies)
+	}
+	if diags.HasError() {
+		t.Errorf("diags = %v", diags)
 	}
 }

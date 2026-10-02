@@ -42,6 +42,8 @@ type resourceModel struct {
 	RedirectURI       types.String `tfsdk:"redirect_uri"`
 	VerifyConnection  types.Bool   `tfsdk:"verify_connection"`
 	CreatedAt         types.String `tfsdk:"created_at"`
+
+	SharedWithOrganization types.Bool `tfsdk:"shared_with_organization"`
 }
 
 var secretNames = []string{"secret"}
@@ -52,6 +54,7 @@ func (r *gitlabResource) Metadata(_ context.Context, req resource.MetadataReques
 
 func (r *gitlabResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	attrs := map[string]schema.Attribute{
+		"shared_with_organization": tfutil.SharedWithOrganizationAttribute(),
 		"id": schema.StringAttribute{
 			Computed:      true,
 			Description:   "The `gitlabId`. The `gitlab.gitlab_id` of an application or a compose references it.",
@@ -137,6 +140,7 @@ func flatten(g *client.GitlabProvider, m *resourceModel) {
 	m.GroupName = tfutil.StringOrNull(&g.GroupName)
 	m.RedirectURI = types.StringValue(g.RedirectURI)
 	m.CreatedAt = types.StringValue(g.GitProvider.CreatedAt)
+	m.SharedWithOrganization = types.BoolValue(g.GitProvider.SharedWithOrganization)
 }
 
 // redirectURI returns the configured value, or the callback that the
@@ -176,6 +180,7 @@ func (r *gitlabResource) Create(ctx context.Context, req resource.CreateRequest,
 		resp.Diagnostics.AddError("Creating GitLab provider", err.Error())
 		return
 	}
+	tfutil.ApplyShare(ctx, &resp.Diagnostics, r.client, &created.GitProvider, plan.SharedWithOrganization)
 	flatten(created, &plan)
 	hideWriteOnly(&plan, inUse)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
@@ -252,6 +257,7 @@ func (r *gitlabResource) Update(ctx context.Context, req resource.UpdateRequest,
 		resp.Diagnostics.AddError("Reading GitLab provider after update", err.Error())
 		return
 	}
+	tfutil.ApplyShare(ctx, &resp.Diagnostics, r.client, &g.GitProvider, plan.SharedWithOrganization)
 	flatten(g, &plan)
 	hideWriteOnly(&plan, inUse)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)

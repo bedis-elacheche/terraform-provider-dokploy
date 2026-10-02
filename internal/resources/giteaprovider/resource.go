@@ -42,6 +42,8 @@ type resourceModel struct {
 	Scopes                types.String `tfsdk:"scopes"`
 	VerifyConnection      types.Bool   `tfsdk:"verify_connection"`
 	CreatedAt             types.String `tfsdk:"created_at"`
+
+	SharedWithOrganization types.Bool `tfsdk:"shared_with_organization"`
 }
 
 var secretNames = []string{"client_secret"}
@@ -52,6 +54,7 @@ func (r *giteaResource) Metadata(_ context.Context, req resource.MetadataRequest
 
 func (r *giteaResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	attrs := map[string]schema.Attribute{
+		"shared_with_organization": tfutil.SharedWithOrganizationAttribute(),
 		"id": schema.StringAttribute{
 			Computed:      true,
 			Description:   "The `giteaId`. The `gitea.gitea_id` of an application or a compose references it.",
@@ -134,6 +137,7 @@ func flatten(g *client.GiteaProvider, m *resourceModel) {
 	m.RedirectURI = types.StringValue(g.RedirectURI)
 	m.Scopes = types.StringValue(g.Scopes)
 	m.CreatedAt = types.StringValue(g.GitProvider.CreatedAt)
+	m.SharedWithOrganization = types.BoolValue(g.GitProvider.SharedWithOrganization)
 }
 
 func (r *giteaResource) redirectURI(v types.String) string {
@@ -165,6 +169,7 @@ func (r *giteaResource) Create(ctx context.Context, req resource.CreateRequest, 
 		resp.Diagnostics.AddError("Creating Gitea provider", err.Error())
 		return
 	}
+	tfutil.ApplyShare(ctx, &resp.Diagnostics, r.client, &created.GitProvider, plan.SharedWithOrganization)
 	flatten(created, &plan)
 	hideWriteOnly(&plan, inUse)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
@@ -239,6 +244,7 @@ func (r *giteaResource) Update(ctx context.Context, req resource.UpdateRequest, 
 		resp.Diagnostics.AddError("Reading Gitea provider after update", err.Error())
 		return
 	}
+	tfutil.ApplyShare(ctx, &resp.Diagnostics, r.client, &g.GitProvider, plan.SharedWithOrganization)
 	flatten(g, &plan)
 	hideWriteOnly(&plan, inUse)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
